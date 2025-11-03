@@ -1,0 +1,253 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  PNPM_VERSION: 8.15.4
+  NODE_VERSION: 20
+
+jobs:
+  lint_typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache node_modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            apps/**/node_modules
+            packages/**/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run commitlint (conventional commits)
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          pnpm exec commitlint --from "$BASE_SHA" --to ${{ github.sha }}
+
+      - name: Run commitlint on push
+        if: github.event_name == 'push'
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            FROM_SHA=$(git rev-list --max-parents=0 ${{ github.sha }})
+          else
+            FROM_SHA=${{ github.event.before }}
+          fi
+          pnpm exec commitlint --from "$FROM_SHA" --to ${{ github.sha }}
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  unit_tests:
+    runs-on: ubuntu-latest
+    needs: lint_typecheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache node_modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            apps/**/node_modules
+            packages/**/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run unit tests with coverage
+        run: pnpm test
+
+      - name: Build API
+        run: pnpm --filter @bookforge/api build
+
+      - name: Build workers
+        run: pnpm --filter @bookforge/workers build
+
+      - name: Build POS app
+        run: pnpm --filter @bookforge/pos-app build
+
+      - name: Upload API artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: api-dist
+          path: apps/api/dist
+
+      - name: Upload workers artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: workers-dist
+          path: apps/workers/dist
+
+      - name: Upload POS app artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: pos-app-dist
+          path: |
+            apps/pos-app/dist
+            apps/pos-app/dist/electron
+
+  e2e_playwright:
+    runs-on: ubuntu-latest
+    needs: unit_tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache node_modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            apps/**/node_modules
+            packages/**/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Run Playwright tests
+        run: pnpm exec playwright test
+
+  docker_build_scan:
+    runs-on: ubuntu-latest
+    needs: unit_tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        run: docker build -t bookforge/api:ci -f apps/api/Dockerfile apps/api
+
+      - name: Build workers image
+        run: docker build -t bookforge/workers:ci -f apps/workers/Dockerfile apps/workers
+
+      - name: Build POS app image
+        run: docker build -t bookforge/pos-app:ci -f apps/pos-app/Dockerfile apps/pos-app
+
+      - name: Scan API image with Trivy
+        uses: aquasecurity/trivy-action@v0.22.0
+        with:
+          image-ref: bookforge/api:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Scan workers image with Trivy
+        uses: aquasecurity/trivy-action@v0.22.0
+        with:
+          image-ref: bookforge/workers:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Scan POS app image with Trivy
+        uses: aquasecurity/trivy-action@v0.22.0
+        with:
+          image-ref: bookforge/pos-app:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true

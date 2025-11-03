@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "composite": true,
+    "types": ["node", "vite/client", "./src/types/electron"],
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src", "electron", "vite.config.ts", "vitest.config.ts"],
+  "references": [
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/domain" }
+  ]
+}

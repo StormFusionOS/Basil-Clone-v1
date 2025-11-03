@@ -1,0 +1,49 @@
+{
+  "name": "@bookforge/pos-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.ts",
+  "scripts": {
+    "dev": "concurrently \"vite dev\" \"electronmon electron/main.ts\"",
+    "build": "pnpm run build:web && pnpm run build:electron",
+    "preview": "vite preview",
+    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "test": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "electron:build": "electron-builder",
+    "build:web": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json"
+  },
+  "dependencies": {
+    "@bookforge/domain": "workspace:*",
+    "@bookforge/ui": "workspace:*",
+    "@mui/icons-material": "^5.15.6",
+    "@mui/material": "^5.15.6",
+    "@mui/x-data-grid": "^6.18.2",
+    "@tanstack/react-query": "^5.12.2",
+    "axios": "^1.6.3",
+    "better-sqlite3": "^9.0.0",
+    "date-fns": "^2.30.0",
+    "electron-log": "^5.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    "uuid": "^9.0.1",
+    "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/uuid": "^9.0.7",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^28.2.3",
+    "electron-builder": "^24.6.4",
+    "electronmon": "^2.0.3",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.6",
+    "vitest": "^0.34.6"
+  }
+}

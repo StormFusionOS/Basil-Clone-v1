@@ -1,0 +1,152 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: bookforge
+      POSTGRES_USER: bookforge_app
+      POSTGRES_PASSWORD: devP@ssw0rd!
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bookforge_app']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    environment:
+      RABBITMQ_DEFAULT_USER: bookforge
+      RABBITMQ_DEFAULT_PASS: bookforge_secret
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  minio:
+    image: minio/minio:RELEASE.2023-12-02T10-51-33Z
+    environment:
+      MINIO_ROOT_USER: bookforge
+      MINIO_ROOT_PASSWORD: bookforge_secret
+    command: server /data --console-address :9001
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://bookforge_app:devP@ssw0rd!@postgres:5432/bookforge
+      PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '8080:8080'
+    logging:
+      driver: loki
+      options:
+        loki-url: http://loki:3100/loki/api/v1/push
+        loki-external-labels: 'app=bookforge-pos,store_id=dev'
+        loki-labels: 'service={{.Label "com.docker.compose.service"}}'
+
+  workers:
+    build:
+      context: .
+      dockerfile: apps/workers/Dockerfile
+    environment:
+      API_URL: http://api:8080/v1
+      AMQP_URL: amqp://bookforge:bookforge_secret@rabbitmq:5672
+      ORDER_QUEUE: bookforge.orders
+    depends_on:
+      - api
+      - rabbitmq
+    logging:
+      driver: loki
+      options:
+        loki-url: http://loki:3100/loki/api/v1/push
+        loki-external-labels: 'app=bookforge-pos,store_id=dev'
+        loki-labels: 'service={{.Label "com.docker.compose.service"}}'
+
+  pos-app:
+    build:
+      context: .
+      dockerfile: apps/pos-app/Dockerfile
+    environment:
+      VITE_API_URL: https://nginx:8443/v1
+    depends_on:
+      - api
+    ports:
+      - '5173:80'
+    logging:
+      driver: loki
+      options:
+        loki-url: http://loki:3100/loki/api/v1/push
+        loki-external-labels: 'app=bookforge-pos,store_id=dev'
+        loki-labels: 'service={{.Label "com.docker.compose.service"}}'
+
+  nginx:
+    build:
+      context: ./infra/nginx
+    depends_on:
+      - api
+      - pos-app
+    ports:
+      - '8443:8443'
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - '9090:9090'
+    depends_on:
+      - api
+      - rabbitmq-exporter
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - '3000:3000'
+    depends_on:
+      - prometheus
+      - loki
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  loki:
+    image: grafana/loki:2.9.2
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./infra/loki/config.yml:/etc/loki/config.yml:ro
+    ports:
+      - '3100:3100'
+
+  rabbitmq-exporter:
+    image: prometheuscommunity/rabbitmq-exporter:latest
+    environment:
+      RABBIT_URL: http://rabbitmq:15672
+      RABBIT_USER: bookforge
+      RABBIT_PASSWORD: bookforge_secret
+      PUBLISH_PORT: '9419'
+    ports:
+      - '9419:9419'
+    depends_on:
+      - rabbitmq
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  minio_data:
