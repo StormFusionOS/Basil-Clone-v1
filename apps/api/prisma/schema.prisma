@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model organizations {
+  id         String  @id @default(uuid()) @db.Uuid
+  name       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  stores     stores[]
+  users      users[]
+}
+
+model stores {
+  id          String   @id @db.VarChar(64)
+  org_id      String   @db.Uuid
+  name        String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  org         organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  locations   locations[]
+  inventory   inventory[]
+  stock_movements stock_movements[]
+  orders      orders[]
+  purchase_orders purchase_orders[]
+  reorder_rules reorder_rules[]
+  users       users[]
+}
+
+model users {
+  id            String   @id @default(uuid()) @db.Uuid
+  org_id        String   @db.Uuid
+  store_id      String?  @db.VarChar(64)
+  email         String   @unique
+  name          String
+  role          String
+  password_hash String
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  org           organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  store         stores?  @relation(fields: [store_id], references: [id], onDelete: SetNull)
+}
+
+model titles {
+  isbn13      String    @id @db.VarChar(13)
+  title       String
+  subtitle    String?
+  authors     String[]
+  publisher   String?
+  pub_date    DateTime?
+  binding     String?
+  msrp_cents  Int?
+  subjects    String[]
+  edition     String?
+  language    String?
+  dimensions  String?
+  weight      String?
+  items       items[]
+  listings    listings[]
+  po_lines    po_lines[]
+  requests    requests[] @relation("TitleRequests")
+
+  @@index([title], map: "titles_title_idx")
+}
+
+model items {
+  id             String           @id @default(uuid()) @db.Uuid
+  isbn13         String           @db.VarChar(13)
+  condition      String
+  signed         Boolean
+  first_edition  Boolean
+  notes          String?
+  taxable        Boolean
+  sku_override   String?
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+  title          titles           @relation(fields: [isbn13], references: [isbn13])
+  inventory      inventory[]
+  stock_movements stock_movements[]
+  order_lines    order_lines[]
+  listings       listings[]
+  reorder_rules  reorder_rules[]
+  consignor_items consignor_items[]
+}
+
+model locations {
+  id       String @id @default(uuid()) @db.Uuid
+  store_id String @db.VarChar(64)
+  name     String
+  path     String
+  store    stores @relation(fields: [store_id], references: [id], onDelete: Cascade)
+}
+
+model inventory {
+  item_id      String
+  store_id     String @db.VarChar(64)
+  qty_on_hand  Int
+  qty_reserved Int
+  bin          String?
+  updated_at   DateTime @updatedAt
+  item         items  @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  store        stores @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  @@id([item_id, store_id])
+}
+
+model stock_movements {
+  id        String   @id @default(uuid()) @db.Uuid
+  item_id   String
+  store_id  String @db.VarChar(64)
+  type      String
+  qty       Int
+  ref_type  String?
+  ref_id    String?
+  user_id   String?
+  ts        DateTime @default(now())
+  item      items    @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  store     stores   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+}
+
+model customers {
+  id                  String   @id @default(uuid()) @db.Uuid
+  name                String
+  email               String?
+  phone               String?
+  marketing_opt_in    Boolean
+  store_credit_cents  Int      @default(0)
+  loyalty_points      Int      @default(0)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  orders              orders[]
+  requests            requests[]
+  credit_issuances    store_credit_issuances[]
+  credit_redemptions  store_credit_redemptions[]
+}
+
+model orders {
+  id             String     @id @default(uuid()) @db.Uuid
+  store_id       String   @db.VarChar(64)
+  customer_id    String?
+  status         String
+  subtotal_cents Int
+  tax_cents      Int
+  discount_cents Int
+  total_cents    Int
+  store_credit_applied_cents Int      @default(0)
+  loyalty_points_awarded     Int      @default(0)
+  created_at     DateTime   @default(now())
+  updated_at     DateTime   @updatedAt
+  customer       customers? @relation(fields: [customer_id], references: [id])
+  order_lines    order_lines[]
+  payments       payments[]
+  store          stores     @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  credit_redemptions store_credit_redemptions[]
+}
+
+model store_credit_issuances {
+  id           String   @id @default(uuid()) @db.Uuid
+  customer_id  String   @db.Uuid
+  amount_cents Int
+  reason       String
+  issued_by    String?
+  created_at   DateTime @default(now())
+  customer     customers @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@index([customer_id], map: "store_credit_issuances_customer_idx")
+}
+
+model store_credit_redemptions {
+  id                 String   @id @default(uuid()) @db.Uuid
+  customer_id        String   @db.Uuid
+  order_id           String   @db.Uuid
+  amount_cents       Int
+  loyalty_points_used Int     @default(0)
+  redeemed_by        String?
+  created_at         DateTime @default(now())
+  customer           customers @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  order              orders    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([customer_id], map: "store_credit_redemptions_customer_idx")
+  @@index([order_id], map: "store_credit_redemptions_order_idx")
+}
+
+model order_lines {
+  id             String   @id @default(uuid()) @db.Uuid
+  order_id       String
+  item_id        String
+  qty            Int
+  price_cents    Int
+  discount_cents Int
+  tax_cents      Int
+  order          orders @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  item           items  @relation(fields: [item_id], references: [id])
+}
+
+model payments {
+  id            String   @id @default(uuid()) @db.Uuid
+  order_id      String
+  method        String
+  external_txn_id String?
+  amount_cents  Int
+  status        String
+  ts            DateTime @default(now())
+  order         orders   @relation(fields: [order_id], references: [id], onDelete: Cascade)
+}
+
+model vendors {
+  id             String            @id @default(uuid()) @db.Uuid
+  name           String
+  account_num    String?
+  edi_qualifier  String?
+  edi_id         String?
+  payment_terms  String?
+  contact        String?
+  purchase_orders purchase_orders[]
+}
+
+model purchase_orders {
+  id         String    @id @default(uuid()) @db.Uuid
+  vendor_id  String
+  store_id   String   @db.VarChar(64)
+  status     String
+  created_at DateTime  @default(now())
+  vendor     vendors   @relation(fields: [vendor_id], references: [id])
+  lines      po_lines[]
+  receipts   receipts[]
+  store      stores    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+}
+
+model po_lines {
+  id            String   @id @default(uuid()) @db.Uuid
+  po_id         String
+  isbn13        String   @db.VarChar(13)
+  ordered_qty   Int
+  received_qty  Int      @default(0)
+  cost_cents    Int
+  purchase_order purchase_orders @relation(fields: [po_id], references: [id], onDelete: Cascade)
+  title          titles          @relation(fields: [isbn13], references: [isbn13])
+}
+
+model receipts {
+  id          String    @id @default(uuid()) @db.Uuid
+  po_id       String
+  ts          DateTime  @default(now())
+  received_by String
+  purchase_order purchase_orders @relation(fields: [po_id], references: [id], onDelete: Cascade)
+}
+
+model reorder_rules {
+  id        String @id @default(uuid()) @db.Uuid
+  item_id   String
+  store_id  String @db.VarChar(64)
+  min       Int
+  max       Int
+  lead_time_days Int
+  item      items  @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  store     stores @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  @@unique([item_id, store_id])
+}
+
+model channels {
+  id             String     @id @default(uuid()) @db.Uuid
+  kind           String
+  credentials_ref String?
+  enabled        Boolean
+  listings       listings[]
+}
+
+model listings {
+  id             String    @id @default(uuid()) @db.Uuid
+  item_id        String
+  channel_id     String
+  sku            String
+  price_cents    Int
+  state          String
+  last_synced_at DateTime?
+  error_message  String?
+  item           items      @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  channel        channels   @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+}
+
+model requests {
+  id          String    @id @default(uuid()) @db.Uuid
+  customer_id String
+  isbn13      String?   @db.VarChar(13)
+  title       String
+  author      String
+  status      String
+  created_at  DateTime  @default(now())
+  customer    customers @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  title_ref   titles?   @relation("TitleRequests", fields: [isbn13], references: [isbn13])
+}
+
+model consignors {
+  id               String            @id @default(uuid()) @db.Uuid
+  name             String
+  split_percent    Int
+  settlement_terms String?
+  items            consignor_items[]
+}
+
+model consignor_items {
+  id                     String     @id @default(uuid()) @db.Uuid
+  consignor_id           String
+  item_id                String
+  split_percent_override Int?
+  consignor              consignors @relation(fields: [consignor_id], references: [id], onDelete: Cascade)
+  item                   items      @relation(fields: [item_id], references: [id], onDelete: Cascade)
+}

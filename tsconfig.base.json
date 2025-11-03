@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bookforge/ui": ["packages/ui/src"],
+      "@bookforge/domain": ["packages/domain/src"],
+      "@bookforge/clients": ["packages/clients/src"]
+    }
+  }
+}

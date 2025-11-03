@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES2021",
+    "outDir": "dist/electron"
+  },
+  "include": ["electron/**/*"],
+  "exclude": ["src", "node_modules"]
+}

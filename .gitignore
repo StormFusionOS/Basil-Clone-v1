@@ -1,0 +1,19 @@
+node_modules
+.DS_Store
+pnpm-lock.yaml
+dist
+build
+coverage
+.tmp
+.env
+.idea
+.vscode
+.eslintcache
+pnpm-debug.log
+reports
+!/apps/api/src/reports/
+playwright-report
+
+# Electron build artifacts
+release
+out

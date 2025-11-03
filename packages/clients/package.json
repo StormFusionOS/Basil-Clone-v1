@@ -1,0 +1,23 @@
+{
+  "name": "@bookforge/clients",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist",
+    "lint": "eslint 'src/**/*.ts'",
+    "test": "jest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "@bookforge/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1"
+  }
+}
